@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Neon Clash</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="fight.css">
+</head>
+<body>
+<div id="app">
+  <main id="stage">
+    <canvas id="screen" tabindex="0" role="img" aria-label="Juego de pelea en pixel art sobre una azotea cyberpunk con lluvia y letreros de neón"></canvas>
+    <div class="hud-bar">
+      <button type="button" id="btn-pause" aria-label="Pausa">II</button>
+      <button type="button" id="btn-sfx" aria-label="Efectos de sonido">SFX</button>
+      <button type="button" id="btn-music" aria-label="Música">MÚS</button>
+      <button type="button" id="btn-full" aria-label="Pantalla completa">[ ]</button>
+      <button type="button" id="btn-panel" aria-label="Mostrar el panel de la IA">IA</button>
+    </div>
+    <div id="touch" class="touch" aria-label="Controles táctiles">
+      <div class="t-left-cluster">
+        <div class="t-aux">
+          <button type="button" data-press="dash">DASH</button>
+          <button type="button" data-act="9">BURST</button>
+        </div>
+        <div class="t-pad">
+          <button type="button" class="t-up" data-press="jump" aria-label="Saltar">▲</button>
+          <button type="button" class="t-lf" data-hold="left" aria-label="Izquierda">◀</button>
+          <button type="button" class="t-rt" data-hold="right" aria-label="Derecha">▶</button>
+          <button type="button" class="t-dn" data-hold="block" aria-label="Bloquear">▼</button>
+        </div>
+      </div>
+      <div class="t-acts">
+        <button type="button" class="t-skill" data-act="4"><span class="lbl">S1</span></button>
+        <button type="button" class="t-skill" data-act="5"><span class="lbl">S2</span></button>
+        <button type="button" class="t-skill" data-act="6"><span class="lbl">S3</span></button>
+        <button type="button" class="t-skill" data-act="7"><span class="lbl">S4</span></button>
+        <button type="button" class="t-basic" data-act="1"><span class="lbl">GOLPE</span></button>
+        <button type="button" class="t-basic" data-act="2"><span class="lbl">PATADA</span></button>
+        <button type="button" class="t-basic" data-act="3"><span class="lbl">AGARRE</span></button>
+        <button type="button" class="t-ult" data-act="8"><span class="lbl">ULT</span></button>
+      </div>
+    </div>
+    <div class="rotate" role="alert">Gira el teléfono a horizontal para jugar</div>
+  </main>
+  <aside id="side" aria-label="Panel de los jugadores">
+    <section class="card" id="panel-0"></section>
+    <section class="card" id="panel-1"></section>
+    <section class="card help">
+      <h3>Controles (Jugador 1)</h3>
+      <dl class="keys">
+        <dt>A / D</dt><dd>Moverse</dd>
+        <dt>W</dt><dd>Saltar</dd>
+        <dt>S</dt><dd>Bloquear (mantener)</dd>
+        <dt>Shift</dt><dd>Dash (10 de energía)</dd>
+        <dt>J · K · L</dt><dd>Golpe · Patada · Agarre</dd>
+        <dt>U · I · O · P</dt><dd>Skills 1 a 4</dd>
+        <dt>Espacio</dt><dd>Definitiva (2 barras)</dd>
+        <dt>E</dt><dd>Burst: escapar de un combo (1 barra)</dd>
+        <dt>Esc</dt><dd>Pausa</dd>
+      </dl>
+      <p class="note">Golpe → patada → skill → definitiva se pueden cancelar en cadena cuando el golpe conecta. El agarre vence al bloqueo; los golpes durante el arranque del rival son <em>counter</em> (+25%).</p>
+    </section>
+  </aside>
+</div>
+
+<div id="menu" class="overlay">
+  <div class="menu-box">
+    <header class="menu-head">
+      <h1>NEON CLASH</h1>
+      <p class="sub">Pelea en pixel art. La CPU decide con modelos de decisión que corren en tu navegador (WebGPU), con Jev o con Ollama local.</p>
+    </header>
+    <div class="mode" role="radiogroup" aria-label="Modo de juego">
+      <button type="button" data-mode="hvc" role="radio">Humano vs CPU</button>
+      <button type="button" data-mode="cvc" role="radio">CPU vs CPU</button>
+    </div>
+    <div class="sides">
+      <section class="side" id="side-0">
+        <h2>Jugador 1 <span class="who"></span></h2>
+        <div class="roster" role="listbox" aria-label="Luchador del jugador 1"></div>
+        <label class="model-row">Modelo de la CPU <select class="model"></select></label>
+        <label class="pick-row"><input type="checkbox" class="cpu-picks"> La CPU elige su luchador</label>
+        <div class="detail"></div>
+      </section>
+      <section class="side" id="side-1">
+        <h2>Jugador 2 <span class="who"></span></h2>
+        <div class="roster" role="listbox" aria-label="Luchador del jugador 2"></div>
+        <label class="model-row">Modelo de la CPU <select class="model"></select></label>
+        <label class="pick-row"><input type="checkbox" class="cpu-picks"> La CPU elige su luchador</label>
+        <div class="detail"></div>
+      </section>
+    </div>
+    <div class="options">
+      <label>Decisión de la CPU
+        <select id="decision-mode">
+          <option value="argmax">Opción más probable</option>
+          <option value="sample">Muestrear según las probabilidades</option>
+        </select>
+      </label>
+      <p id="ollama-status" class="status" role="status"></p>
+    </div>
+    <div class="options sound-row">
+      <label><input type="checkbox" id="opt-sfx"> Efectos de sonido</label>
+      <label><input type="checkbox" id="opt-music"> Música</label>
+      <label>Volumen <input type="range" id="opt-volume" min="0" max="1" step="0.05"></label>
+      <label><select id="opt-touch">
+        <option value="auto">Controles táctiles: automático</option>
+        <option value="on">Controles táctiles: siempre</option>
+        <option value="off">Controles táctiles: nunca</option>
+      </select></label>
+    </div>
+    <div class="jev-row">
+      <label for="jev-key">API key de Jev (TypeSafe)</label>
+      <input type="password" id="jev-key" autocomplete="off" spellcheck="false" placeholder="Queda solo en la memoria del servidor local">
+      <button type="button" id="jev-connect">Conectar</button>
+      <button type="button" id="jev-clear">Quitar</button>
+      <p id="jev-status" class="status" role="status"></p>
+    </div>
+    <div class="actions">
+      <button type="button" id="start" class="primary">PELEAR</button>
+    </div>
+  </div>
+</div>
+
+<div id="loading" class="overlay" hidden>
+  <div class="menu-box small">
+    <h2>Cargando modelos</h2>
+    <p class="sub">Se descargan una sola vez desde Hugging Face y quedan guardados en este navegador.</p>
+    <div id="loading-list" class="load-list"></div>
+    <p id="loading-error" class="status bad" role="alert"></p>
+    <div class="actions"><button type="button" id="loading-back" hidden>Volver al menú</button></div>
+  </div>
+</div>
+
+<div id="select" class="overlay" hidden>
+  <div class="menu-box select-box">
+    <h2>Selección de luchadores</h2>
+    <p class="sub">Cada CPU ve las estadísticas de todos los luchadores y la elección actual del rival, y puede cambiar hasta que termine el tiempo.</p>
+    <p id="select-timer" class="select-timer" role="status"></p>
+    <div class="select-sides">
+      <section class="card select-side" id="sel-0"></section>
+      <section class="card select-side" id="sel-1"></section>
+    </div>
+    <div class="actions">
+      <button type="button" id="select-lock">Bloquear ya</button>
+    </div>
+  </div>
+</div>
+
+<div id="pause" class="overlay" hidden>
+  <div class="menu-box small">
+    <h2>Pausa</h2>
+    <div class="actions">
+      <button type="button" id="resume" class="primary">Continuar</button>
+      <button type="button" id="quit">Salir al menú</button>
+    </div>
+  </div>
+</div>
+
+<div id="result" class="overlay" hidden>
+  <div class="menu-box small">
+    <h2 id="result-title"></h2>
+    <p id="result-sub" class="sub"></p>
+    <div class="actions">
+      <button type="button" id="rematch" class="primary">Revancha</button>
+      <button type="button" id="to-menu">Menú</button>
+    </div>
+  </div>
+</div>
+
+<script src="fight-engine.js"></script>
+<script src="fight-audio.js"></script>
+<script src="fight-data.js"></script>
+<script src="fight-game.js"></script>
+<script src="fight-web.js"></script>
+<script src="fight-ai.js"></script>
+<script src="fight-main.js"></script>
+</body>
+</html>
