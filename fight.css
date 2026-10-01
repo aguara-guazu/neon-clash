@@ -256,3 +256,7 @@ body.touch-ui.in-match.human-p1 .touch { display: block; }
   #pause .menu-box { max-height: 92dvh; overflow-y: auto; }
   .moves li { grid-template-columns: 100px 1fr; font-size: 11px; }
 }
+@media (max-height: 520px) and (orientation: landscape) {
+  .hud-bar { left: max(6px, env(safe-area-inset-left)); top: 6px; transform: none; flex-direction: column; gap: 3px; }
+  .hud-bar button { font-size: 9px; padding: 3px 4px; min-width: 34px; }
+}

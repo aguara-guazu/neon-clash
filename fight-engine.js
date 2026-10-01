@@ -323,13 +323,19 @@ const screenCanvas = document.getElementById('screen');
 const FIT_TARGET = document.getElementById('stage');
 const ctx = screenCanvas.getContext('2d', { alpha: false });
 let scale = 1;
+/* Renders at the largest integer scale; when that wastes more than 8% of the
+   available space (phones in landscape), the canvas is stretched with CSS
+   (image-rendering: pixelated) to fill it, so the residual non-integer step
+   is applied to an already integer-upscaled image. */
 function fit() {
   const dpr = window.devicePixelRatio || 1;
-  const aw = Math.floor(FIT_TARGET.clientWidth * dpr), ah = Math.floor(FIT_TARGET.clientHeight * dpr);
-  scale = Math.max(1, Math.floor(Math.min(aw / W, ah / H)));
+  const aw = FIT_TARGET.clientWidth * dpr, ah = FIT_TARGET.clientHeight * dpr;
+  const exact = Math.min(aw / W, ah / H);
+  scale = Math.max(1, Math.floor(exact));
+  const shown = exact > scale && scale / exact < 0.92 ? exact : scale;
   screenCanvas.width = W * scale; screenCanvas.height = H * scale;
-  screenCanvas.style.width = (W * scale / dpr) + 'px';
-  screenCanvas.style.height = (H * scale / dpr) + 'px';
+  screenCanvas.style.width = (W * shown / dpr) + 'px';
+  screenCanvas.style.height = (H * shown / dpr) + 'px';
   ctx.imageSmoothingEnabled = false;
 }
 function present() {
