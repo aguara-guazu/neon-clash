@@ -15,7 +15,8 @@ const PLAN_FRAMES = [0, 30, 24, 30, 16, 50, 50, 14, 14, 24];
 
 const AI_INSTRUCTIONS = "Choose the best action for `you` right now against `opponent`. Every listed attack reaches "
   + "`opponent` right now. Punish an opponent who is recovering with an attack, block or dodge `threats`, and cancel "
-  + "into a stronger move when `combo` is present.";
+  + "into a stronger move when `combo` is present. Waiting, retreating and blocking without attacking build a passivity "
+  + "penalty; attack or advance to avoid it, especially when `you.passivity` is present.";
 
 const PROJ_NAMES = ['', 'electric bolt', 'sword wave', 'virus spike', 'venom blob', 'napalm grenade', 'ground shockwave', 'drone bullet'];
 
@@ -201,22 +202,25 @@ function aiBuild(f, o) {
   const add = (key, desc, plan, code) => { criteria[key] = desc; map[key] = { plan, code }; };
   const hidden = o.st[ST_CLOAK] > 0;
   const dist = Math.round(Math.abs(o.x - f.x));
+  const threats = aiThreats(f, o);
+  /* Under the heavy passivity penalty, with nothing incoming, stalling options are withheld. */
+  const forced = f.passiveLv === 2 && !threats.length && o.state !== S_ATTACK;
   if (inHitState(f)) {
     if (burstReady(f)) add("burst", "spend 1 super bar to break out of the combo", PL_ACT, A_BURST);
     add("wait", "take the hit and keep your super bar", PL_WAIT, 0);
   } else {
     if (f.onGround && f.state !== S_ATTACK) {
-      add("approach", "walk closer", PL_APPROACH, 0);
-      add("retreat", Math.min(f.x, STAGE_W - f.x) < 50 ? "walk back (you are near the wall)" : "walk back", PL_RETREAT, 0);
+      add("approach", "walk closer; reduces passivity", PL_APPROACH, 0);
+      if (!forced) add("retreat", Math.min(f.x, STAGE_W - f.x) < 50 ? "walk back (you are near the wall); builds passivity" : "walk back; builds passivity", PL_RETREAT, 0);
       add("jump_in", "jump at the opponent; avoids ground attacks", PL_JUMPIN, 0);
-      add("jump_back", "jump away", PL_JUMPBACK, 0);
+      if (!forced) add("jump_back", "jump away; builds passivity", PL_JUMPBACK, 0);
       if (f.energy >= 10 && f.dashCd <= 0) {
-        add("dash_in", "fast dash in", PL_DASHIN, 0);
-        add("dash_back", "fast dash away", PL_DASHBACK, 0);
+        add("dash_in", "fast dash in; reduces passivity", PL_DASHIN, 0);
+        if (!forced) add("dash_back", "fast dash away; builds passivity", PL_DASHBACK, 0);
       }
-      add("block", f.guard < 35 ? "hold guard (your guard is almost broken); loses to throws" : "hold guard; loses to throws", PL_BLOCK, 0);
+      if (!forced) add("block", f.guard < 35 ? "hold guard (your guard is almost broken); loses to throws; builds passivity" : "hold guard; loses to throws; builds passivity", PL_BLOCK, 0);
     }
-    add("wait", "stay neutral", PL_WAIT, 0);
+    if (!forced || f.state === S_ATTACK) add("wait", f.passiveT >= PASSIVE_WARN ? "stay neutral; makes your passivity penalty worse" : "stay neutral; builds passivity", PL_WAIT, 0);
     for (let code = A_LIGHT; code <= A_ULT; code++) {
       const m = f.moves[code];
       if (!m || (!f.onGround && !m.air)) continue;
@@ -229,19 +233,22 @@ function aiBuild(f, o) {
   const you = { fighter: f.def.name, hp_percent: Math.round((100 * f.hp) / f.hpMax), super_bars: Math.floor(f.meter / 100), state: aiFighterState(f, o) };
   const mine = aiStatusNames(f);
   if (mine.length) you.statuses = mine;
+  if (f.passiveLv === 2) you.passivity = "heavy passivity penalty: you take 30% more damage and lose health and super until you attack or advance";
+  else if (f.passiveLv === 1) you.passivity = "passivity penalty: you take 15% more damage and lose super until you attack or advance";
+  else if (f.passiveT >= PASSIVE_WARN) you.passivity = "warning: you have been passive; attack or advance now to avoid a penalty";
   const them = {
     fighter: o.def.name, hp_percent: Math.round((100 * o.hp) / o.hpMax),
     state: hidden ? "cloaked: invisible, position unknown" : aiFighterState(o, f),
   };
   const theirs = aiStatusNames(o);
   if (theirs.length) them.statuses = theirs;
+  if (o.passiveLv > 0) them.passivity = "penalized for passivity: takes extra damage, pressure them";
   if (o.meter >= ULT_COST) them.ultimate_ready = true;
   const state = {
     you, opponent: them,
     range: hidden ? "unknown" : dist < 40 ? "close" : dist < 120 ? "mid" : "far",
   };
   if (!hidden && !o.onGround) state.opponent_airborne = true;
-  const threats = aiThreats(f, o);
   if (threats.length) state.threats = threats;
   if (f.state === S_ATTACK && f.hitConfirmed) state.combo = "your hit connected: cancel into a stronger move now";
   return { criteria, map, state };

@@ -43,7 +43,7 @@ const PICK_TEMPERATURE = 1.6;
 const recentPicks = [[], []];
 
 function loadConfig() {
-  const base = { mode: 'hvc', pick: [0, 3], model: ['', ''], decision: 'argmax', cpuPicks: [true, true], touch: 'auto' };
+  const base = { mode: 'hvc', pick: [0, 3], model: ['', ''], decision: 'argmax', cpuPicks: [true, true], touch: 'auto', jevDefaulted: false };
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
     if (saved && typeof saved === 'object') {
@@ -52,6 +52,7 @@ function loadConfig() {
       if (Array.isArray(saved.model)) base.model = saved.model.map((v) => (typeof v === 'string' ? v : '')).slice(0, 2);
       if (saved.decision === 'sample' || saved.decision === 'argmax') base.decision = saved.decision;
       if (saved.touch === 'auto' || saved.touch === 'on' || saved.touch === 'off') base.touch = saved.touch;
+      if (saved.jevDefaulted === true) base.jevDefaulted = true;
       if (Array.isArray(saved.cpuPicks)) base.cpuPicks = [0, 1].map((i) => (typeof saved.cpuPicks[i] === "boolean" ? saved.cpuPicks[i] : true));
     }
   } catch (err) { /* storage unavailable: defaults */ }
@@ -150,12 +151,17 @@ function fillModelSelect(side) {
       ? [m.label, m.parameter_size, m.quantization_level, m.cached ? "cargado" : `descarga ${mb(m.size_bytes)}`].filter(Boolean).join(" · ")
       : [m.name, m.parameter_size, m.quantization_level, m.loaded ? "cargado" : null].filter(Boolean).join(" · "),
   });
-  const groups = [["web", "Navegador · WebGPU (se descarga una vez)"], ["ollama", "Ollama · GGUF (servidor local)"], ["mlx", "MLX · en el playground"], ["jev", "Jev · TypeSafe (nube)"]]
+  const groups = [["jev", "Jev · TypeSafe (nube)"], ["web", "Navegador · WebGPU (se descarga una vez)"], ["ollama", "Ollama · GGUF (servidor local)"], ["mlx", "MLX · en el playground"]]
     .map(([backend, label]) => [label, models.filter((m) => m.backend === backend)])
     .filter(([, items]) => items.length)
     .map(([label, items]) => el("optgroup", { label }, items.map(option)));
   sel.replaceChildren(...(groups.length ? groups : [el("option", { value: "", text: "Sin modelos de decisión" })]));
   const names = models.map((m) => m.name);
+  const jevNames = models.filter((m) => m.backend === "jev").map((m) => m.name);
+  if (jevNames.length && !cfg.jevDefaulted) {
+    cfg.model[0] = cfg.model[1] = jevNames.find((n) => n.endsWith("latest")) || jevNames[0];
+    if (side === 1) { cfg.jevDefaulted = true; saveConfig(); }
+  }
   if (!names.includes(cfg.model[side])) {
     const webNames = models.filter((m) => m.backend === "web").sort((x, y) => x.size_bytes - y.size_bytes).map((m) => m.name);
     cfg.model[side] = webNames[side % Math.max(webNames.length, 1)] || names[0] || '';
@@ -218,8 +224,9 @@ async function refreshHealth() {
     name: spec.id, backend: "web", label: spec.label, parameter_size: spec.params, quantization_level: spec.quant,
     size_bytes: spec.bytes, cached: web.loaded.has(spec.id),
   })) : [];
-  const jevBrowser = backend.local ? [] : backend.jevModels.map((name) => ({ name, backend: "jev", quantization_level: "nube" }));
-  models = [...webList, ...local, ...jevBrowser];
+  const jevNames = backend.jevModels.length ? backend.jevModels : backend.jevSiteModels;
+  const jevBrowser = backend.local ? [] : jevNames.map((name) => ({ name, backend: "jev", quantization_level: backend.jevModels.length ? "nube · tu key" : "nube" }));
+  models = [...jevBrowser, ...webList, ...local];
   parts.unshift(gpu ? `Navegador (WebGPU) · ${webList.length} modelo(s)` : "Este navegador no tiene WebGPU: los modelos en el navegador no están disponibles (usa Chrome, Edge, Safari o Firefox reciente)");
   ui.status.textContent = models.length ? `${parts.join(" | ")}: ${models.map((m) => m.label || m.name).join(", ")}` : `${parts.join(" | ")}. No hay modelos de decisión.`;
   ui.status.className = models.length ? "status ok" : "status bad";
@@ -236,11 +243,13 @@ function renderJevStatus(jev) {
     ui.jevStatus.className = `status ${jev.configured ? "ok" : jev.error ? "bad" : ""}`;
     return;
   }
-  ui.jevKey.placeholder = "Se guarda solo en este navegador";
+  ui.jevKey.placeholder = "Opcional: tu propia key, se guarda solo en este navegador";
   ui.jevStatus.textContent = backend.jevModels.length
-    ? `Jev conectado con tu key (guardada solo en este navegador): ${backend.jevModels.join(", ")}. Cada decisión se factura a tu cuenta de TypeSafe.`
-    : backend.jevError ? `Jev: ${backend.jevError}` : "Sin API key: Jev no participa. Si cargas tu key, se guarda solo en este navegador.";
-  ui.jevStatus.className = `status ${backend.jevModels.length ? "ok" : backend.jevError ? "bad" : ""}`;
+    ? `Jev con tu key (guardada solo en este navegador): ${backend.jevModels.join(", ")}. Cada decisión se factura a tu cuenta de TypeSafe.`
+    : backend.jevError ? `Jev: ${backend.jevError}`
+      : backend.jevSiteModels.length ? `Jev disponible con la key del sitio (${backend.jevSiteModels.join(", ")}). Si prefieres, carga tu propia key: se guarda solo en este navegador y las decisiones se facturan a tu cuenta.`
+        : "Jev no está disponible. Si cargas tu key, se guarda solo en este navegador.";
+  ui.jevStatus.className = `status ${backend.jevModels.length || backend.jevSiteModels.length ? "ok" : backend.jevError ? "bad" : ""}`;
 }
 
 async function setJevKey(apiKey) {
@@ -738,12 +747,12 @@ window.addEventListener('resize', fit);
 
 buildRosters();
 webInit().then(async () => {
-  const key = jevKey();
-  if (key) {
-    try { await aiHealth(); } catch (err) {
-      if (/HTTP 40[45]/.test(err.message)) backend.probe = false;
-      try { backend.jevModels = await jevValidate(key); } catch (e) { backend.jevError = e.message; }
-    }
+  let local = false;
+  try { await aiHealth(); local = true; } catch (err) { if (/HTTP 40[45]/.test(err.message)) backend.probe = false; }
+  if (!local) {
+    try { backend.jevSiteModels = await jevValidate(''); } catch (e) { backend.jevSiteModels = []; }
+    const key = jevKey();
+    if (key) { try { backend.jevModels = await jevValidate(key); } catch (e) { backend.jevError = e.message; } }
   }
   refreshHealth();
 });

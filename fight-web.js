@@ -12,7 +12,7 @@ const web = {
   worker: null, caps: null, capsWaiters: [], specs: [], loaded: new Map(), progress: new Map(),
   pending: new Map(), nextRid: 1, onProgress: null,
 };
-const backend = { local: false, localJev: false, probe: true, jevModels: [], jevError: '' };
+const backend = { local: false, localJev: false, probe: true, jevModels: [], jevError: '', jevSiteModels: [] };
 
 function isWebModel(name) { return typeof name === 'string' && name.startsWith('web/'); }
 function isJevModel(name) { return typeof name === 'string' && name.startsWith('jev-'); }
@@ -102,15 +102,15 @@ async function decisionRequest(model, body) {
   }
   if (isJevModel(model) && !backend.localJev) {
     const key = jevKey();
-    if (!key) throw new Error('Falta la API key de Jev');
-    return postJson('/api/jev-systemone', req, { 'X-Typesafe-Key': key });
+    if (!key && !backend.jevSiteModels.length) throw new Error('Falta la API key de Jev');
+    return postJson('/api/jev-systemone', req, key ? { 'X-Typesafe-Key': key } : {});
   }
   return postJson('/v1/systemone', req);
 }
 
-/* Validates a visitor key against TypeSafe through /api/jev-models; returns the jev model names. */
+/* Lists jev models through /api/jev-models with the visitor key, or with the site key when `key` is empty. */
 async function jevValidate(key) {
-  const res = await fetch('/api/jev-models', { headers: { 'X-Typesafe-Key': key } });
+  const res = await fetch('/api/jev-models', { headers: key ? { 'X-Typesafe-Key': key } : {} });
   const payload = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(payload.detail || `HTTP ${res.status}`);
   return payload.models || [];

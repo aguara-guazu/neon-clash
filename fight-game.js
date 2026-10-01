@@ -12,6 +12,7 @@ const SRC_MELEE = 0, SRC_PROJ = 1, SRC_ZONE = 2;
 const GRAV = 0.3, JUMP_VY = -5.6, JUMP_VX = 2.1, SEP_MAX = W - 48;
 const MAX_PROJ = 40, MAX_ZONES = 24, MAX_POP = 40;
 const ROUND_TIME = 99;
+const PASSIVE_WARN = 3, PASSIVE_LV1 = 5, PASSIVE_LV2 = 9;
 const FX_RAMP = { volt: R_ELEC, ronin: R_PINK, brick: R_GOLD, glitch: R_HACK, viper: R_TOX, pyra: R_FIRE };
 const AIRKICK = P(0, 0, 10, 0, 60, 60, 40, 90, -4, 10, 16, 2);
 const AIR_BOX = [2, 30, 24, 30];
@@ -41,6 +42,7 @@ function makeFighter(side, def, alt) {
     pose: new Float32Array(POSE_N), from: new Float32Array(POSE_N), tgt: new Float32Array(POSE_N), shown: new Float32Array(POSE_N),
     twT: 0, twDur: 1, twEase: linear, forceShow: true, lastAnim: -1,
     input: { left: false, right: false, block: false, act: 0, actT: 0, jump: 0, dash: 0 },
+    passiveT: 0, passiveLv: 0, passiveDrain: 0,
     cpu: false, ai: null, wins: 0, cutOn: 0, cutN: 0, cutT: 0, beamLen: 0, aiLabel: '',
   };
   f.pose.set(PO.STANCE); f.shown.set(PO.STANCE); f.from.set(PO.STANCE); f.tgt.set(PO.STANCE);
@@ -53,6 +55,7 @@ function resetFighter(f, x, keepMeter) {
   f.guard = 100; f.heat = 0; f.shieldHP = 0; f.move = null; f.stun = 0; f.invT = 0; f.parryT = 0; f.jolt = 0;
   f.juggle = 0; f.juggleImmune = false; f.comboHits = 0; f.comboDmg = 0; f.showComboT = 0; f.ambush = false; f.dotAcc = 0;
   f.st.fill(0); f.stk.fill(0); f.cds.fill(0); f.dashCd = 0; f.cutOn = 0; f.flashT = 0;
+  f.passiveT = 0; f.passiveLv = 0; f.passiveDrain = 0;
   f.input.left = f.input.right = f.input.block = false; f.input.act = 0; f.input.actT = 0; f.input.jump = 0; f.input.dash = 0;
   setState(f, S_IDLE);
   f.pose.set(PO.STANCE); f.shown.set(PO.STANCE);
@@ -135,6 +138,7 @@ function startMove(f, o, m) {
     burst(f.x, f.y - 26, 26, 90, 0.6, f.ramp, 0, 2);
   }
   if (m.fire && f.def.id === 'pyra') addHeat(f, 25);
+  f.passiveT = Math.max(0, f.passiveT - 1);
   aiNotify(o, 1);
 }
 
@@ -257,6 +261,7 @@ function dmgMult(att, def) {
   if (att.def.id === 'volt' && def.st[ST_SHOCK] > 0) k *= 1.2;
   if (att.def.id === 'viper' && def.st[ST_POISON] > 0) k *= 1.25;
   if (def.def.id === 'brick') k *= 0.9;
+  if (def.passiveLv === 1) k *= 1.15; else if (def.passiveLv === 2) k *= 1.3;
   return k;
 }
 
@@ -330,6 +335,7 @@ function resolveHit(att, def, spec, src, move, srcX) {
 
   att.meter = Math.min(METER_MAX, att.meter + dmg * 0.5);
   def.meter = Math.min(METER_MAX, def.meter + dmg * 0.35);
+  att.passiveT = 0;
   att.energy = Math.min(100, att.energy + 2);
   def.comboHits++; def.comboDmg += dmg;
   att.showCombo = def.comboHits; att.showComboT = 90;
@@ -465,11 +471,44 @@ function updateStatuses(f, o) {
   }
 }
 
+/* Passivity: time spent neither attacking nor moving toward the opponent builds
+   passiveT; being hit or pressured pauses it. Level 1 (PASSIVE_LV1 s): +15%
+   damage taken, half energy regen, super drains to the opponent. Level 2
+   (PASSIVE_LV2 s): +30% damage taken and a slow health drain that never kills. */
+function updatePassivity(f, o) {
+  if (f.hp <= 0) return;
+  const s = f.state;
+  if (s === S_HITSTUN || s === S_AIRHIT || s === S_DOWN || s === S_GETUP || s === S_STUN || s === S_BLOCKSTUN || s === S_KO || f.st[ST_FREEZE] > 0) return;
+  const toward = o.x >= f.x ? 1 : -1;
+  const active = s === S_ATTACK || ((s === S_WALK || s === S_JUMP) && f.vx * toward > 0.2) || (s === S_DASH && f.dashDir === toward);
+  if (active) f.passiveT = Math.max(0, f.passiveT - DT * 2);
+  else f.passiveT += DT;
+  const lv = f.passiveT >= PASSIVE_LV2 ? 2 : f.passiveT >= PASSIVE_LV1 ? 1 : 0;
+  if (lv > f.passiveLv) {
+    popText(f.x, f.y - 66, lv === 2 ? 'NEGATIVE PENALTY' : 'PASSIVE', C.RED2);
+    sfx('guardbreak', f.x);
+  }
+  f.passiveLv = lv;
+  if (lv >= 1) {
+    f.meter = Math.max(0, f.meter - 10 * DT);
+    o.meter = Math.min(METER_MAX, o.meter + 6 * DT);
+  }
+  if (lv === 2) {
+    f.passiveDrain += 6 * DT;
+    if (f.passiveDrain >= 1) {
+      const d = Math.floor(f.passiveDrain);
+      f.passiveDrain -= d;
+      if (f.hp - d >= 1) { f.hp -= d; f.trailWait = 10; }
+    }
+  }
+}
+
 function updateResources(f, o) {
   let regen = 10;
   if (f.st[ST_POISON] > 0) regen *= 0.5;
   if (f.st[ST_OVERCHARGE] > 0) regen *= 2;
   if (f.def.id === 'glitch') regen += 3 * countDebuffs(o);
+  if (f.passiveLv > 0) regen *= 0.5;
   f.energy = Math.min(100, f.energy + regen * DT);
   if (f.state !== S_BLOCK && f.state !== S_BLOCKSTUN) f.guard = Math.min(100, f.guard + 14 * DT);
   for (let i = 0; i < NACT; i++) if (f.cds[i] > 0) f.cds[i] = Math.max(0, f.cds[i] - DT);
@@ -1003,6 +1042,7 @@ function stepSim(controls) {
     if (b.cpu) aiTick(b, a);
     updateStatuses(a, b); updateStatuses(b, a);
     updateResources(a, b); updateResources(b, a);
+    updatePassivity(a, b); updatePassivity(b, a);
     control(a, b); control(b, a);
   }
   updateTimers(a); updateTimers(b);
@@ -1568,10 +1608,16 @@ function drawSideHud(f) {
     textS(lab, sx + ((14 - textW(lab, 1)) >> 1), sy + 3, ready ? C.WHITE : C.MET1, 1);
     if (f.st[ST_HACK] > 0) { line(sx + 1, sy + 1, sx + 12, sy + 9, C.RED2); line(sx + 12, sy + 1, sx + 1, sy + 9, C.RED2); }
   }
+  if (f.passiveT >= PASSIVE_WARN) {
+    const lab = f.passiveLv === 2 ? 'PENALTY' : f.passiveLv === 1 ? 'PASSIVE' : 'MOVE!';
+    const px = right ? W - 10 - 44 : 10, py = iy + 11;
+    if (f.passiveLv === 0 || (game.animFrame & 2)) textShadow(lab, right ? W - 10 - textW(lab, 1) : 10, py, f.passiveLv ? C.RED2 : C.YEL2, 1);
+    drawBar(px, py + 7, 44, 2, f.passiveT, PASSIVE_LV2, f.passiveLv ? C.RED1 : C.YEL1, C.SKY1, right);
+  }
   if (f.showComboT > 0 && f.showCombo >= 2) {
     const cx = right ? W - 60 : 14;
-    numShadow(f.showCombo, cx, 60, C.YEL2, 3);
-    textShadow('HITS', cx + numW(f.showCombo, 3) + 3, 66, C.ORG2, 1);
+    numShadow(f.showCombo, cx, 72, C.YEL2, 3);
+    textShadow('HITS', cx + numW(f.showCombo, 3) + 3, 78, C.ORG2, 1);
   }
 }
 
