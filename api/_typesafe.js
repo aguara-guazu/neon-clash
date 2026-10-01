@@ -10,7 +10,7 @@
 const TYPESAFE_URL = 'https://api.typesafe.ai';
 const MAX_BODY = 256 * 1024;
 const SITE_WINDOW_MS = 10_000;
-const SITE_MAX_PER_WINDOW = 40;
+const SITE_MAX_PER_WINDOW = 60;
 const hits = new Map();
 
 function visitorKey(req) {
