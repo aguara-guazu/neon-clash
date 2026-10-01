@@ -19,27 +19,13 @@
       <button type="button" id="btn-panel" aria-label="Mostrar el panel de la IA">IA</button>
     </div>
     <div id="touch" class="touch" aria-label="Controles táctiles">
-      <div class="t-left-cluster">
-        <div class="t-aux">
-          <button type="button" data-press="dash">DASH</button>
-          <button type="button" data-act="9">BURST</button>
-        </div>
-        <div class="t-pad">
-          <button type="button" class="t-up" data-press="jump" aria-label="Saltar">▲</button>
-          <button type="button" class="t-lf" data-hold="left" aria-label="Izquierda">◀</button>
-          <button type="button" class="t-rt" data-hold="right" aria-label="Derecha">▶</button>
-          <button type="button" class="t-dn" data-hold="block" aria-label="Bloquear">▼</button>
-        </div>
+      <div class="t-zone" id="stick-zone" aria-label="Joystick">
+        <div class="t-base" id="stick-base"><div class="t-knob" id="stick-knob"></div></div>
       </div>
-      <div class="t-acts">
-        <button type="button" class="t-skill" data-act="4"><span class="lbl">S1</span></button>
-        <button type="button" class="t-skill" data-act="5"><span class="lbl">S2</span></button>
-        <button type="button" class="t-skill" data-act="6"><span class="lbl">S3</span></button>
-        <button type="button" class="t-skill" data-act="7"><span class="lbl">S4</span></button>
-        <button type="button" class="t-basic" data-act="1"><span class="lbl">GOLPE</span></button>
-        <button type="button" class="t-basic" data-act="2"><span class="lbl">PATADA</span></button>
-        <button type="button" class="t-basic" data-act="3"><span class="lbl">AGARRE</span></button>
-        <button type="button" class="t-ult" data-act="8"><span class="lbl">ULT</span></button>
+      <div class="t-btns">
+        <button type="button" class="t-btn t-ab" data-btn="AB" aria-label="A más B: agarre o burst">A+B</button>
+        <button type="button" class="t-btn t-a" data-btn="A" aria-label="A: golpe">A<small>GOLPE</small></button>
+        <button type="button" class="t-btn t-b" data-btn="B" aria-label="B: patada">B<small>PATADA</small></button>
       </div>
     </div>
     <div class="rotate" role="alert">Gira el teléfono a horizontal para jugar</div>
@@ -50,16 +36,14 @@
     <section class="card help">
       <h3>Controles (Jugador 1)</h3>
       <dl class="keys">
-        <dt>A / D</dt><dd>Moverse</dd>
-        <dt>W</dt><dd>Saltar</dd>
-        <dt>S</dt><dd>Bloquear (mantener)</dd>
-        <dt>Shift</dt><dd>Dash (10 de energía)</dd>
-        <dt>J · K · L</dt><dd>Golpe · Patada · Agarre</dd>
-        <dt>U · I · O · P</dt><dd>Skills 1 a 4</dd>
-        <dt>Espacio</dt><dd>Definitiva (2 barras)</dd>
-        <dt>E</dt><dd>Burst: escapar de un combo (1 barra)</dd>
-        <dt>Esc</dt><dd>Pausa</dd>
+        <dt>WASD / flechas</dt><dd>Moverse (↑ salta)</dd>
+        <dt>J · K</dt><dd>A (golpe) · B (patada)</dd>
+        <dt>J + K</dt><dd>Agarre; burst mientras te golpean</dd>
+        <dt>← o ↓</dt><dd>Bloquear (← solo si te atacan)</dd>
+        <dt>→→ / ←←</dt><dd>Dash (o Shift)</dd>
+        <dt>Esc</dt><dd>Pausa y lista de comandos</dd>
       </dl>
+      <div id="help-moves" class="moves"></div>
       <p class="note">Golpe → patada → skill → definitiva se pueden cancelar en cadena cuando el golpe conecta. El agarre vence al bloqueo; los golpes durante el arranque del rival son <em>counter</em> (+25%). Pasar más de 5 s sin atacar ni avanzar activa una penalización por pasividad: recibes más daño, pierdes super y, a los 9 s, también vida.</p>
     </section>
   </aside>
@@ -91,6 +75,8 @@
         <div class="detail"></div>
       </section>
     </div>
+    <details class="more" id="more-opts">
+    <summary>Opciones, sonido y API key de Jev</summary>
     <div class="options">
       <label>Decisión de la CPU
         <select id="decision-mode">
@@ -117,7 +103,8 @@
       <button type="button" id="jev-clear">Quitar</button>
       <p id="jev-status" class="status" role="status"></p>
     </div>
-    <div class="actions">
+    </details>
+    <div class="actions sticky">
       <button type="button" id="start" class="primary">PELEAR</button>
     </div>
   </div>
@@ -151,6 +138,7 @@
 <div id="pause" class="overlay" hidden>
   <div class="menu-box small">
     <h2>Pausa</h2>
+    <div id="pause-moves" class="moves"></div>
     <div class="actions">
       <button type="button" id="resume" class="primary">Continuar</button>
       <button type="button" id="quit">Salir al menú</button>
@@ -173,6 +161,7 @@
 <script src="fight-audio.js"></script>
 <script src="fight-data.js"></script>
 <script src="fight-game.js"></script>
+<script src="fight-input.js"></script>
 <script src="fight-web.js"></script>
 <script src="fight-ai.js"></script>
 <script src="fight-main.js"></script>

@@ -3,8 +3,8 @@
 /* Menu, side panels, keyboard input and the fixed-timestep main loop. */
 
 const STORE_KEY = 'neon-clash-v1';
-const SKILL_KEYS = ['U', 'I', 'O', 'P', 'Espacio'];
-const ACT_KEYS = { KeyJ: A_LIGHT, KeyK: A_HEAVY, KeyL: A_GRAB, KeyU: A_S1, KeyI: A_S2, KeyO: A_S3, KeyP: A_S4, Space: A_ULT, KeyE: A_BURST };
+const SKILL_SLOTS = [A_S1, A_S2, A_S3, A_S4];
+const DIR_KEYS = { KeyA: 'kl', ArrowLeft: 'kl', KeyD: 'kr', ArrowRight: 'kr', KeyW: 'ku', ArrowUp: 'ku', KeyS: 'kd', ArrowDown: 'kd' };
 const PREVENT = new Set(['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -113,11 +113,11 @@ function buildRosters() {
 function renderDetail(side) {
   const def = FIGHTERS[cfg.pick[side]];
   const items = def.skills.map((m, k) => el('li', {}, [
-    el('span', { class: 'k', text: SKILL_KEYS[k] }),
+    el('span', { class: 'k', text: MOVE_COMMANDS[SKILL_SLOTS[k]] }),
     el('span', {}, [el('span', { class: 'n', text: m.name }), ' ', el('span', { class: 'c', text: `${m.cost} en · ${m.cd}s` }), el('br'), el('span', { class: 'd', text: m.es })]),
   ]));
   items.push(el('li', {}, [
-    el('span', { class: 'k', text: 'Esp' }),
+    el('span', { class: 'k', text: MOVE_COMMANDS[A_ULT] }),
     el('span', {}, [el('span', { class: 'n', text: def.ult.name }), ' ', el('span', { class: 'c', text: '2 barras' }), el('br'), el('span', { class: 'd', text: def.ult.es })]),
   ]));
   const pick = cpuPick[side];
@@ -148,7 +148,7 @@ function fillModelSelect(side) {
   const option = (m) => el("option", {
     value: m.name,
     text: m.backend === "web"
-      ? [m.label, m.parameter_size, m.quantization_level, m.cached ? "cargado" : `descarga ${mb(m.size_bytes)}`].filter(Boolean).join(" · ")
+      ? [m.label, m.cached ? "cargado" : `descarga ${mb(m.size_bytes)}`].filter(Boolean).join(" · ")
       : [m.name, m.parameter_size, m.quantization_level, m.loaded ? "cargado" : null].filter(Boolean).join(" · "),
   });
   const groups = [["jev", "Jev · TypeSafe (nube)"], ["web", "Navegador · WebGPU (se descarga una vez)"], ["ollama", "Ollama · GGUF (servidor local)"], ["mlx", "MLX · en el playground"]]
@@ -490,7 +490,8 @@ async function beginMatch() {
   startMatch(FIGHTERS[cfg.pick[0]], FIGHTERS[cfg.pick[1]], isCpu(0), isCpu(1));
   setInMatch(true);
   playMusic(1);
-  labelTouchButtons();
+  inputReset();
+  renderMoves($('#help-moves'), humanDef());
   const warm = new Set();
   for (let side = 0; side < 2; side++) {
     const f = game.fighters[side];
@@ -588,6 +589,7 @@ function setPaused(on) {
   if (game.phase === 'attract' || !ui.menu.hidden || !ui.result.hidden) return;
   game.paused = on;
   ui.pause.hidden = !on;
+  if (on) { renderMoves($('#pause-moves'), humanDef()); inputReset(); }
   if (audio.ctx) { if (on) audio.ctx.suspend(); else audio.ctx.resume(); }
   if (!on) screenEl.focus();
 }
@@ -601,35 +603,38 @@ function humanFighter() {
 }
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape') { if (ui.menu.hidden && ui.result.hidden) setPaused(!game.paused); return; }
-  const f = humanFighter();
-  if (!f) return;
+  if (!humanFighter()) return;
   if (PREVENT.has(e.code)) e.preventDefault();
-  const inp = f.input;
-  switch (e.code) {
-    case 'KeyA': case 'ArrowLeft': inp.left = true; return;
-    case 'KeyD': case 'ArrowRight': inp.right = true; return;
-    case 'KeyS': case 'ArrowDown': inp.block = true; return;
-  }
+  const dir = DIR_KEYS[e.code];
+  if (dir) { raw[dir] = true; return; }
   if (e.repeat) return;
-  if (e.code === 'KeyW' || e.code === 'ArrowUp') { inp.jump = 6; return; }
-  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { inp.dash = 6; return; }
-  const act = ACT_KEYS[e.code];
-  if (act) { inp.act = act; inp.actT = 8; }
+  if (e.code === 'KeyJ') raw.qA = 1;
+  else if (e.code === 'KeyK') raw.qB = 1;
+  else if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') raw.dash = 1;
 });
 window.addEventListener('keyup', (e) => {
-  const f = game.fighters[0];
-  if (!f || f.cpu) return;
-  const inp = f.input;
-  switch (e.code) {
-    case 'KeyA': case 'ArrowLeft': inp.left = false; break;
-    case 'KeyD': case 'ArrowRight': inp.right = false; break;
-    case 'KeyS': case 'ArrowDown': inp.block = false; break;
-  }
+  const dir = DIR_KEYS[e.code];
+  if (dir) raw[dir] = false;
 });
-window.addEventListener('blur', () => {
-  const f = game.fighters[0];
-  if (f && !f.cpu) { f.input.left = false; f.input.right = false; f.input.block = false; }
-});
+window.addEventListener('blur', inputReset);
+
+/* Command list for one fighter: basics, the four skills, ultimate, grab and burst. */
+function renderMoves(root, def) {
+  if (!root) return;
+  if (!def) { root.replaceChildren(); return; }
+  const row = (cmd, name, note) => el('li', {}, [el('span', { class: 'cmd', text: cmd }), el('span', { class: 'n', text: name }), note ? el('span', { class: 'd', text: note }) : null]);
+  root.replaceChildren(
+    el('h4', { text: `Comandos de ${def.name} (→ = hacia el rival)` }),
+    el('ul', {}, [
+      row(MOVE_COMMANDS[A_LIGHT], 'Golpe'), row(MOVE_COMMANDS[A_HEAVY], 'Patada'),
+      ...def.skills.map((m, k) => row(MOVE_COMMANDS[SKILL_SLOTS[k]], m.name, `${m.cost} en`)),
+      row(MOVE_COMMANDS[A_ULT], def.ult.name, '2 barras'),
+      row(MOVE_COMMANDS[A_GRAB], 'Agarre'), row('A + B', 'Burst', 'mientras te golpean, 1 barra'),
+      row('→→ / ←←', 'Dash'), row('← o ↓', 'Bloquear'),
+    ]),
+  );
+}
+function humanDef() { const f = game.fighters[0]; return f && !f.cpu ? f.def : null; }
 
 /* ---------- Menu wiring ---------- */
 for (const b of ui.modeBtns) b.addEventListener('click', () => { cfg.mode = b.dataset.mode; saveConfig(); refreshMenu(); });
@@ -683,50 +688,57 @@ function applyTouchMode() {
 ui.optTouch.addEventListener('change', () => { cfg.touch = ui.optTouch.value; saveConfig(); applyTouchMode(); });
 if (coarse.addEventListener) coarse.addEventListener('change', applyTouchMode);
 
-const touchActs = Array.from(ui.touch.querySelectorAll('[data-act]'));
-function labelTouchButtons() {
-  const f = game.fighters[0];
-  if (!f) return;
-  for (const b of touchActs) {
-    const code = Number(b.dataset.act);
-    const m = f.moves[code];
-    if (m && code >= A_S1 && code <= A_ULT) b.querySelector('.lbl').textContent = m.name;
-  }
+/* Floating analog stick: the base appears under the thumb anywhere in the
+   left zone; the knob vector is quantized to 8 directions by inputStick(). */
+const stick = { id: null, cx: 0, cy: 0, zone: $('#stick-zone'), base: $('#stick-base'), knob: $('#stick-knob') };
+const STICK_R = 46;
+function stickMove(e) {
+  let dx = e.clientX - stick.cx, dy = e.clientY - stick.cy;
+  const m = Math.hypot(dx, dy);
+  if (m > STICK_R) { dx *= STICK_R / m; dy *= STICK_R / m; }
+  stick.knob.style.transform = `translate(${dx}px, ${dy}px)`;
+  if (humanFighter()) inputStick(dx / STICK_R, dy / STICK_R);
 }
-function holdOn(btn, on) {
-  const f = humanFighter();
-  btn.classList.toggle('on', on);
-  if (!f) return;
-  const key = btn.dataset.hold;
-  if (key) f.input[key] = on;
-  if (!on) return;
-  if (navigator.vibrate) navigator.vibrate(8);
-  if (btn.dataset.press === 'jump') f.input.jump = 6;
-  else if (btn.dataset.press === 'dash') f.input.dash = 6;
-  else if (btn.dataset.act) { f.input.act = Number(btn.dataset.act); f.input.actT = 8; }
+function stickEnd(e) {
+  if (e.pointerId !== stick.id) return;
+  stick.id = null;
+  stick.knob.style.transform = 'translate(0px, 0px)';
+  stick.base.classList.remove('on');
+  stick.base.style.left = ''; stick.base.style.top = '';
+  inputStick(0, 0);
 }
-for (const btn of ui.touch.querySelectorAll('button')) {
-  btn.addEventListener('pointerdown', (e) => { e.preventDefault(); btn.setPointerCapture(e.pointerId); holdOn(btn, true); });
-  const release = () => { if (btn.classList.contains('on')) holdOn(btn, false); };
-  btn.addEventListener('pointerup', release);
-  btn.addEventListener('pointercancel', release);
-  btn.addEventListener('lostpointercapture', release);
+stick.zone.addEventListener('pointerdown', (e) => {
+  if (stick.id !== null) return;
+  e.preventDefault();
+  stick.id = e.pointerId;
+  stick.zone.setPointerCapture(e.pointerId);
+  const r = stick.zone.getBoundingClientRect();
+  stick.cx = e.clientX; stick.cy = e.clientY;
+  stick.base.style.left = `${e.clientX - r.left}px`; stick.base.style.top = `${e.clientY - r.top}px`;
+  stick.base.classList.add('on');
+  stickMove(e);
+});
+stick.zone.addEventListener('pointermove', (e) => { if (e.pointerId === stick.id) stickMove(e); });
+stick.zone.addEventListener('pointerup', stickEnd);
+stick.zone.addEventListener('pointercancel', stickEnd);
+stick.zone.addEventListener('lostpointercapture', stickEnd);
+for (const btn of ui.touch.querySelectorAll('[data-btn]')) {
+  btn.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    btn.classList.add('on');
+    if (!humanFighter()) return;
+    if (navigator.vibrate) navigator.vibrate(8);
+    const b = btn.dataset.btn;
+    if (b === 'A' || b === 'AB') raw.qA = 1;
+    if (b === 'B' || b === 'AB') raw.qB = 1;
+  });
+  const off = () => btn.classList.remove('on');
+  btn.addEventListener('pointerup', off);
+  btn.addEventListener('pointercancel', off);
+  btn.addEventListener('pointerleave', off);
   btn.addEventListener('contextmenu', (e) => e.preventDefault());
 }
-setInterval(() => {
-  const f = game.fighters[0];
-  if (!f || f.cpu || !document.body.classList.contains('touch-ui') || !document.body.classList.contains('in-match')) return;
-  const o = game.fighters[1];
-  for (const b of touchActs) {
-    const code = Number(b.dataset.act);
-    if (code === A_BURST) { b.classList.toggle('off', !burstReady(f)); continue; }
-    const m = f.moves[code];
-    if (!m) continue;
-    const cd = m.cd > 0 ? f.cds[m.slot] / m.cd : 0;
-    b.style.setProperty('--cd', cd.toFixed(3));
-    b.classList.toggle('off', !canUse(f, o, m));
-  }
-}, 100);
+ui.touch.addEventListener('contextmenu', (e) => e.preventDefault());
 
 /* ---------- Loop ---------- */
 let acc = 0, last = performance.now();
@@ -746,6 +758,7 @@ if ('ResizeObserver' in window) new ResizeObserver(fit).observe(FIT_TARGET);
 window.addEventListener('resize', fit);
 
 buildRosters();
+if (!window.matchMedia('(max-height: 520px)').matches) $('#more-opts').open = true;
 webInit().then(async () => {
   let local = false;
   try { await aiHealth(); local = true; } catch (err) { if (/HTTP 40[45]/.test(err.message)) backend.probe = false; }

@@ -1038,7 +1038,7 @@ function stepSim(controls) {
   const a = game.fighters[0], b = game.fighters[1];
   if (game.hitstop > 0) { game.hitstop--; return; }
   if (controls) {
-    if (a.cpu) aiTick(a, b);
+    if (a.cpu) aiTick(a, b); else humanTick(a, b);
     if (b.cpu) aiTick(b, a);
     updateStatuses(a, b); updateStatuses(b, a);
     updateResources(a, b); updateResources(b, a);
@@ -1536,7 +1536,7 @@ function drawZone(z, front) {
 }
 
 /* ---------- HUD ---------- */
-const KEY_LABELS_H = ['U', 'I', 'O', 'P', 'SP'];
+const KEY_LABELS_H = ['1', '2', '3', '4', 'UL'];
 const KEY_LABELS_C = ['1', '2', '3', '4', 'UL'];
 const HUD_SLOTS = [A_S1, A_S2, A_S3, A_S4, A_ULT];
 
