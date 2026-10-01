@@ -22,7 +22,7 @@ const game = {
   phase: 'attract', phaseT: 0, round: 1, timer: ROUND_TIME, hitstop: 0, camX: (STAGE_W - W) / 2,
   simTime: 0, animFrame: 0, tick: 0, fighters: [null, null], announce: '', announceT: 0, announceCol: C.YEL2,
   glitchT: 0, superT: 0, superName: '', superCol: C.WHITE, matchId: 0, winner: -1, onMatchEnd: null,
-  shakeT: 0, shakeX: 0, shakeY: 0, paused: false,
+  shakeT: 0, shakeX: 0, shakeY: 0, paused: false, showAi: false,
 };
 
 function opp(f) { return game.fighters[1 - f.side]; }
@@ -1567,7 +1567,7 @@ function drawSideHud(f) {
   const nx = right ? W - 10 - textW(name, 1) : 10;
   textShadow(name, nx, 16, C.WHITE, 1);
   textShadow(tag, right ? nx - textW(tag, 1) - 4 : nx + textW(name, 1) + 4, 16, f.cpu ? C.CYN1 : C.YEL1, 1);
-  if (f.cpu && f.aiLabel) textShadow(f.aiLabel, right ? W - 10 - textW(f.aiLabel, 1) : 10, 23, C.MET3, 1);
+  if (f.cpu && f.aiLabel && game.showAi) textShadow(f.aiLabel, right ? W - 10 - textW(f.aiLabel, 1) : 10, 23, C.MET3, 1);
   const ey = 31;
   drawBar(right ? W - 90 : 10, ey, 80, 3, f.energy, 100, C.CYN1, C.SKY1, right);
   drawBar(right ? W - 60 : 10, ey + 5, 50, 2, f.guard, 100, f.guard < 30 ? C.RED1 : C.CLO1, C.SKY1, right);
@@ -1684,9 +1684,5 @@ function renderGame() {
   drawRain();
   if (game.glitchT > 0) glitchRows(6);
   if (a && game.phase !== 'attract') drawHud();
-  if (game.phase === 'attract') {
-    const w = textW('NEON CLASH', 4);
-    textShadow('NEON CLASH', (W - w) >> 1, 40, C.PNK2, 4);
-  }
   drawAnnounce();
 }

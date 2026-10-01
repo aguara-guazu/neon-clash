@@ -260,3 +260,67 @@ body.touch-ui.in-match.human-p1 .touch { display: block; }
   .hud-bar { left: max(6px, env(safe-area-inset-left)); top: 6px; transform: none; flex-direction: column; gap: 3px; }
   .hud-bar button { font-size: 9px; padding: 3px 4px; min-width: 34px; }
 }
+
+/* ---------- Game-first layout: no permanent side panel ---------- */
+#app { grid-template-columns: 1fr !important; height: 100dvh; }
+#stage { height: 100dvh; }
+#side { position: fixed; top: 0; right: 0; bottom: 0; width: min(340px, 86vw); z-index: 5; transform: translateX(100%); transition: transform 0.15s; border-left: 2px solid var(--line); border-top: 0; }
+body.panel-open #side { transform: none; }
+body:not(.panel-open) #btn-panel { display: inline-block !important; }
+body.hide-ai .select-side .bars, body.hide-ai .select-side .hist { display: none; }
+
+/* ---------- Title screen ---------- */
+.title-screen { align-items: center; background: radial-gradient(ellipse at 50% 35%, rgba(61, 49, 135, 0.55), rgba(5, 4, 10, 0.92) 70%); }
+.title-box { text-align: center; margin: auto; padding: 16px; }
+.title-box h1 { margin: 0; font-size: clamp(36px, 8vw, 72px); letter-spacing: 0.14em; color: var(--pink); text-shadow: 4px 4px 0 #7a1a5a, 0 0 24px rgba(255, 110, 199, 0.35); }
+.title-box .tag { margin: 6px 0 22px; color: var(--muted); font-size: 13px; }
+.title-actions { display: grid; gap: 10px; width: min(320px, 80vw); margin: 0 auto; }
+.title-actions button, .pause-actions button { background: var(--bg); border: 2px solid var(--line-2); padding: 10px 14px; cursor: pointer; letter-spacing: 0.06em; }
+.title-actions button:hover, .pause-actions button:hover { border-color: var(--pink); }
+.title-actions .big { padding: 14px; font-size: 18px; font-weight: 700; }
+.title-actions .primary, .pause-actions .primary { border-color: var(--pink); color: var(--pink); }
+.title-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.title-row button { font-size: 12px; }
+.title-status { margin-top: 16px; color: var(--muted); font-size: 11px; min-height: 1em; }
+
+/* ---------- Screens ---------- */
+.screen-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.screen-head h2 { margin: 0; font-size: 18px; }
+.back { background: var(--bg); border: 2px solid var(--line-2); width: 34px; height: 34px; cursor: pointer; font-size: 16px; }
+.back:hover { border-color: var(--pink); }
+.side h3 { margin: 0 0 8px; font-size: 14px; display: flex; gap: 8px; align-items: center; }
+.settings-box { max-width: 560px; }
+.set-group { border-top: 2px solid var(--line); padding: 10px 0; display: grid; gap: 8px; }
+.set-group h3 { margin: 0; font-size: 13px; color: var(--cyan); letter-spacing: 0.05em; }
+.set-row { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.set-row select, .set-row input[type="range"] { width: 100%; }
+.set-check { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--text); }
+.settings-box .more { margin-top: 4px; }
+.settings-box .jev-row { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 12px 10px; }
+.settings-box .jev-row input { flex: 1 1 200px; background: var(--panel); border: 2px solid var(--line-2); color: var(--text); padding: 5px 6px; font: inherit; }
+.settings-box .jev-row button { background: var(--bg); border: 2px solid var(--line-2); padding: 5px 10px; cursor: pointer; }
+.settings-box .jev-row .status { flex-basis: 100%; }
+.pause-actions { display: grid; gap: 8px; margin: 12px auto; width: min(260px, 80vw); }
+.howto-box .keys { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-size: 12px; text-align: left; margin: 0 0 8px; }
+.howto-box .keys dt { color: var(--yellow); }
+.howto-box .keys dd { margin: 0; color: var(--muted); }
+.howto-box, #pause .menu-box { text-align: left; }
+#pause h2 { text-align: center; }
+.detail .pick-note { color: var(--muted); font-size: 12px; }
+
+@media (max-height: 520px) and (orientation: landscape) {
+  .title-box h1 { font-size: 40px; }
+  .title-box .tag { margin: 2px 0 12px; }
+  .title-actions { gap: 6px; }
+  .title-actions .big { padding: 9px; font-size: 15px; }
+  .title-actions button { padding: 7px 10px; }
+  .screen-head { margin-bottom: 6px; }
+  .screen-head h2 { font-size: 14px; }
+  .back { width: 28px; height: 28px; }
+  .settings-box { max-height: 94dvh; overflow-y: auto; }
+  .set-group { padding: 6px 0; gap: 6px; }
+}
+.roster[hidden] { display: none !important; }
+@media (max-height: 520px) and (orientation: landscape) {
+  .detail .pick-note { display: block; font-size: 11px; margin: 0; }
+}

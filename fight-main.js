@@ -14,17 +14,18 @@ const ui = {
   decision: $('#decision-mode'), status: $('#ollama-status'),
   jevKey: $("#jev-key"), jevConnect: $("#jev-connect"), jevClear: $("#jev-clear"), jevStatus: $("#jev-status"),
   resultTitle: $('#result-title'), resultSub: $('#result-sub'),
-  modeBtns: Array.from(document.querySelectorAll('[data-mode]')),
   sides: [0, 1].map((i) => {
     const root = $(`#side-${i}`);
     return {
-      root, roster: $('.roster', root), model: $('.model', root), modelRow: $('.model-row', root), detail: $('.detail', root), who: $('.who', root),
-      pickRow: $(".pick-row", root), pickToggle: $(".cpu-picks", root),
+      root, roster: $('.roster', root), detail: $('.detail', root), who: $('.who', root),
+      model: $(`#model-${i}`), modelRow: $(`#model-row-${i}`), pickRow: $(`#pick-row-${i}`), pickToggle: $(`#picks-${i}`),
     };
   }),
+  chars: $('#chars'), charsTitle: $('#chars-title'), settings: $('#settings'), howto: $('#howto'), titleStatus: $('#title-status'),
+  optAiInfo: $('#opt-aiinfo'),
   panels: [$('#panel-0'), $('#panel-1')],
   optSfx: $("#opt-sfx"), optMusic: $("#opt-music"), optVolume: $("#opt-volume"), optTouch: $("#opt-touch"),
-  btnPause: $("#btn-pause"), btnSfx: $("#btn-sfx"), btnMusic: $("#btn-music"), btnFull: $("#btn-full"), btnPanel: $("#btn-panel"),
+  btnPause: $("#btn-pause"), btnFull: $("#btn-full"), btnPanel: $("#btn-panel"),
   touch: $("#touch"),
   loading: $("#loading"), loadingList: $("#loading-list"), loadingError: $("#loading-error"), loadingBack: $("#loading-back"),
   select: $("#select"), selectTimer: $("#select-timer"), selectSides: [$("#sel-0"), $("#sel-1")], selectLock: $("#select-lock"),
@@ -43,7 +44,7 @@ const PICK_TEMPERATURE = 1.6;
 const recentPicks = [[], []];
 
 function loadConfig() {
-  const base = { mode: 'hvc', pick: [0, 3], model: ['', ''], decision: 'argmax', cpuPicks: [true, true], touch: 'auto', jevDefaulted: false };
+  const base = { mode: 'hvc', pick: [0, 3], model: ['', ''], decision: 'argmax', cpuPicks: [true, true], touch: 'auto', jevDefaulted: false, aiInfo: false };
   try {
     const saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null');
     if (saved && typeof saved === 'object') {
@@ -53,6 +54,7 @@ function loadConfig() {
       if (saved.decision === 'sample' || saved.decision === 'argmax') base.decision = saved.decision;
       if (saved.touch === 'auto' || saved.touch === 'on' || saved.touch === 'off') base.touch = saved.touch;
       if (saved.jevDefaulted === true) base.jevDefaulted = true;
+      if (typeof saved.aiInfo === 'boolean') base.aiInfo = saved.aiInfo;
       if (Array.isArray(saved.cpuPicks)) base.cpuPicks = [0, 1].map((i) => (typeof saved.cpuPicks[i] === "boolean" ? saved.cpuPicks[i] : true));
     }
   } catch (err) { /* storage unavailable: defaults */ }
@@ -120,6 +122,11 @@ function renderDetail(side) {
     el('span', { class: 'k', text: MOVE_COMMANDS[A_ULT] }),
     el('span', {}, [el('span', { class: 'n', text: def.ult.name }), ' ', el('span', { class: 'c', text: '2 barras' }), el('br'), el('span', { class: 'd', text: def.ult.es })]),
   ]));
+  if (cpuChooses(side)) {
+    const m = models.find((x) => x.name === cfg.model[side]);
+    ui.sides[side].detail.replaceChildren(el('p', { class: 'pick-note', text: `La CPU elige su luchador al empezar${m ? ` (${m.label || m.name})` : ''}. Puedes cambiarlo en Configuración.` }));
+    return;
+  }
   const pick = cpuPick[side];
   const note = !cpuChooses(side) ? null
     : pick && pick.index === cfg.pick[side]
@@ -171,26 +178,27 @@ function fillModelSelect(side) {
 }
 
 function refreshMenu() {
-  for (const b of ui.modeBtns) b.setAttribute('aria-checked', String(b.dataset.mode === cfg.mode));
+  const cvc = cfg.mode === 'cvc';
+  ui.charsTitle.textContent = cvc ? 'Elige los luchadores' : 'Elige tu luchador';
   for (let side = 0; side < 2; side++) {
-    const s = ui.sides[side], cpu = isCpu(side);
-    s.who.textContent = cpu ? 'CPU' : 'Humano';
+    const s = ui.sides[side], cpu = isCpu(side), auto = cpuChooses(side);
+    s.who.textContent = cpu ? 'CPU' : 'Tú';
     s.who.classList.toggle('human', !cpu);
-    s.modelRow.hidden = !cpu;
-    s.pickRow.hidden = !cpu;
     s.pickToggle.checked = cfg.cpuPicks[side];
-    const locked = cpuChooses(side);
-    s.roster.classList.toggle("locked", locked);
-    Array.from(s.roster.children).forEach((btn, i) => {
-      btn.setAttribute('aria-selected', String(i === cfg.pick[side]));
-      btn.setAttribute("aria-disabled", String(locked));
-      btn.title = locked ? "La CPU elige su luchador" : "";
-    });
+    s.roster.hidden = auto;
+    Array.from(s.roster.children).forEach((btn, i) => btn.setAttribute('aria-selected', String(i === cfg.pick[side])));
     renderDetail(side);
   }
+  ui.sides[0].root.querySelector('h3').firstChild.textContent = cvc ? 'CPU 1 ' : 'Jugador 1 ';
+  ui.sides[1].root.querySelector('h3').firstChild.textContent = cvc ? 'CPU 2 ' : 'Rival ';
   ui.decision.value = cfg.decision;
+  ui.optAiInfo.checked = cfg.aiInfo;
+  document.body.classList.toggle('hide-ai', !cfg.aiInfo);
+  game.showAi = cfg.aiInfo;
   const needModel = [0, 1].some((side) => isCpu(side) && !cfg.model[side]);
   ui.start.disabled = needModel || picking;
+  const rival = models.find((m) => m.name === cfg.model[1]);
+  ui.titleStatus.textContent = rival ? `IA rival: ${rival.label || rival.name}` : models.length ? '' : 'Buscando modelos de IA…';
 }
 
 async function refreshHealth() {
@@ -327,11 +335,16 @@ function setInMatch(on) {
   if (!on) document.body.classList.remove('panel-open');
 }
 
+function hideScreens() {
+  for (const o of [ui.menu, ui.chars, ui.settings, ui.howto, ui.pause, ui.result]) o.hidden = true;
+}
+
 function showMenu() {
   setInMatch(false);
   playMusic(0);
   game.paused = false;
-  ui.pause.hidden = true; ui.result.hidden = true; ui.menu.hidden = false;
+  hideScreens();
+  ui.menu.hidden = false;
   game.matchId++;
   preview();
   refreshHealth();
@@ -447,7 +460,7 @@ function renderSelect(sel) {
         el("div", { class: "kv", text: line }),
       ])]),
     ];
-    if (s.history.length > 1) nodes.push(el("div", { class: "kv", text: `Cambios: ${s.history.map((i) => FIGHTERS[i].name).join(" → ")}` }));
+    if (s.history.length > 1) nodes.push(el("div", { class: "kv hist", text: `Cambios: ${s.history.map((i) => FIGHTERS[i].name).join(" → ")}` }));
     if (s.error) nodes.push(el("div", { class: "kv error", text: s.error }));
     if (pick && pick.probs) {
       const entries = Object.entries(pick.probs).sort((a, b) => b[1] - a[1]);
@@ -471,7 +484,7 @@ async function beginMatch() {
   picking = true;
   clearInterval(healthTimer);
   ui.start.disabled = true; ui.rematch.disabled = true;
-  ui.menu.hidden = true; ui.result.hidden = true; ui.pause.hidden = true;
+  hideScreens();
   const needed = [...new Set([0, 1].filter(isCpu).map((side) => cfg.model[side]).filter(isWebModel))];
   if (!(await loadWebModels(needed))) {
     picking = false; ui.rematch.disabled = false;
@@ -491,7 +504,6 @@ async function beginMatch() {
   setInMatch(true);
   playMusic(1);
   inputReset();
-  renderMoves($('#help-moves'), humanDef());
   const warm = new Set();
   for (let side = 0; side < 2; side++) {
     const f = game.fighters[side];
@@ -586,7 +598,7 @@ game.onMatchEnd = (winner) => {
 };
 
 function setPaused(on) {
-  if (game.phase === 'attract' || !ui.menu.hidden || !ui.result.hidden) return;
+  if (game.phase === 'attract' || !ui.menu.hidden || !ui.result.hidden || !ui.settings.hidden) return;
   game.paused = on;
   ui.pause.hidden = !on;
   if (on) { renderMoves($('#pause-moves'), humanDef()); inputReset(); }
@@ -598,7 +610,7 @@ function setPaused(on) {
 const screenEl = document.getElementById('screen');
 function humanFighter() {
   const f = game.fighters[0];
-  if (!f || f.cpu || game.phase === 'attract' || game.paused || !ui.menu.hidden) return null;
+  if (!f || f.cpu || game.phase === 'attract' || game.paused || !ui.menu.hidden || !ui.chars.hidden || !ui.settings.hidden) return null;
   return f;
 }
 window.addEventListener('keydown', (e) => {
@@ -637,7 +649,41 @@ function renderMoves(root, def) {
 function humanDef() { const f = game.fighters[0]; return f && !f.cpu ? f.def : null; }
 
 /* ---------- Menu wiring ---------- */
-for (const b of ui.modeBtns) b.addEventListener('click', () => { cfg.mode = b.dataset.mode; saveConfig(); refreshMenu(); });
+/* Title -> character select (skipped when every side is a CPU that picks its own fighter). */
+function play(mode) {
+  cfg.mode = mode; saveConfig();
+  refreshMenu(); preview();
+  if (mode === 'cvc' && cpuChooses(0) && cpuChooses(1)) { beginMatch(); return; }
+  hideScreens();
+  ui.chars.hidden = false;
+}
+let settingsReturn = null;
+function openSettings(from) {
+  settingsReturn = from;
+  if (from) from.hidden = true;
+  ui.settings.hidden = false;
+  refreshHealth();
+}
+function closeSettings() {
+  ui.settings.hidden = true;
+  (settingsReturn || ui.menu).hidden = false;
+  refreshMenu();
+}
+function openHowto() {
+  ui.menu.hidden = true;
+  renderMoves($('#howto-moves'), FIGHTERS[cfg.pick[0]]);
+  ui.howto.hidden = false;
+}
+$('#play-hvc').addEventListener('click', () => play('hvc'));
+$('#play-cvc').addEventListener('click', () => play('cvc'));
+$('#open-settings').addEventListener('click', () => openSettings(ui.menu));
+$('#open-howto').addEventListener('click', openHowto);
+$('#howto-back').addEventListener('click', () => { ui.howto.hidden = true; ui.menu.hidden = false; });
+$('#chars-back').addEventListener('click', showMenu);
+$('#settings-back').addEventListener('click', closeSettings);
+$('#settings-close').addEventListener('click', closeSettings);
+$('#pause-settings').addEventListener('click', () => openSettings(ui.pause));
+ui.optAiInfo.addEventListener('change', () => { cfg.aiInfo = ui.optAiInfo.checked; saveConfig(); refreshMenu(); });
 ui.sides.forEach((s, side) => s.model.addEventListener('change', () => { cfg.model[side] = s.model.value; saveConfig(); refreshMenu(); }));
 ui.decision.addEventListener('change', () => { cfg.decision = ui.decision.value; saveConfig(); });
 ui.sides.forEach((s, side) => s.pickToggle.addEventListener("change", () => { cfg.cpuPicks[side] = s.pickToggle.checked; saveConfig(); refreshMenu(); }));
@@ -660,14 +706,10 @@ document.addEventListener('click', (e) => {
 });
 function refreshAudioUi() {
   ui.optSfx.checked = audio.sfxOn; ui.optMusic.checked = audio.musicOn; ui.optVolume.value = String(audio.volume);
-  ui.btnSfx.setAttribute('aria-pressed', String(audio.sfxOn));
-  ui.btnMusic.setAttribute('aria-pressed', String(audio.musicOn));
 }
 ui.optSfx.addEventListener('change', () => { setSfxOn(ui.optSfx.checked); refreshAudioUi(); });
 ui.optMusic.addEventListener('change', () => { setMusicOn(ui.optMusic.checked); refreshAudioUi(); });
 ui.optVolume.addEventListener('input', () => setAudioVolume(Number(ui.optVolume.value)));
-ui.btnSfx.addEventListener('click', () => { setSfxOn(!audio.sfxOn); refreshAudioUi(); });
-ui.btnMusic.addEventListener('click', () => { setMusicOn(!audio.musicOn); refreshAudioUi(); });
 ui.btnPause.addEventListener('click', () => setPaused(!game.paused));
 ui.btnPanel.addEventListener('click', () => document.body.classList.toggle('panel-open'));
 ui.btnFull.addEventListener('click', async () => {
@@ -758,7 +800,6 @@ if ('ResizeObserver' in window) new ResizeObserver(fit).observe(FIT_TARGET);
 window.addEventListener('resize', fit);
 
 buildRosters();
-if (!window.matchMedia('(max-height: 520px)').matches) $('#more-opts').open = true;
 webInit().then(async () => {
   let local = false;
   try { await aiHealth(); local = true; } catch (err) { if (/HTTP 40[45]/.test(err.message)) backend.probe = false; }

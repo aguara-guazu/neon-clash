@@ -13,8 +13,6 @@
     <canvas id="screen" tabindex="0" role="img" aria-label="Juego de pelea en pixel art sobre una azotea cyberpunk con lluvia y letreros de neón"></canvas>
     <div class="hud-bar">
       <button type="button" id="btn-pause" aria-label="Pausa">II</button>
-      <button type="button" id="btn-sfx" aria-label="Efectos de sonido">SFX</button>
-      <button type="button" id="btn-music" aria-label="Música">MÚS</button>
       <button type="button" id="btn-full" aria-label="Pantalla completa">[ ]</button>
       <button type="button" id="btn-panel" aria-label="Mostrar el panel de la IA">IA</button>
     </div>
@@ -33,80 +31,111 @@
   <aside id="side" aria-label="Panel de los jugadores">
     <section class="card" id="panel-0"></section>
     <section class="card" id="panel-1"></section>
-    <section class="card help">
-      <h3>Controles (Jugador 1)</h3>
-      <dl class="keys">
-        <dt>WASD / flechas</dt><dd>Moverse (↑ salta)</dd>
-        <dt>J · K</dt><dd>A (golpe) · B (patada)</dd>
-        <dt>J + K</dt><dd>Agarre; burst mientras te golpean</dd>
-        <dt>← o ↓</dt><dd>Bloquear (← solo si te atacan)</dd>
-        <dt>→→ / ←←</dt><dd>Dash (o Shift)</dd>
-        <dt>Esc</dt><dd>Pausa y lista de comandos</dd>
-      </dl>
-      <div id="help-moves" class="moves"></div>
-      <p class="note">Golpe → patada → skill → definitiva se pueden cancelar en cadena cuando el golpe conecta. El agarre vence al bloqueo; los golpes durante el arranque del rival son <em>counter</em> (+25%). Pasar más de 5 s sin atacar ni avanzar activa una penalización por pasividad: recibes más daño, pierdes super y, a los 9 s, también vida.</p>
-    </section>
   </aside>
 </div>
 
-<div id="menu" class="overlay">
-  <div class="menu-box">
-    <header class="menu-head">
-      <h1>NEON CLASH</h1>
-      <p class="sub">Pelea en pixel art. La CPU decide con modelos de decisión que corren en tu navegador (WebGPU), con Jev o con Ollama local.</p>
-    </header>
-    <div class="mode" role="radiogroup" aria-label="Modo de juego">
-      <button type="button" data-mode="hvc" role="radio">Humano vs CPU</button>
-      <button type="button" data-mode="cvc" role="radio">CPU vs CPU</button>
+<div id="menu" class="overlay title-screen">
+  <div class="title-box">
+    <h1>NEON CLASH</h1>
+    <p class="tag">Pelea en pixel art contra una IA que decide en tiempo real</p>
+    <div class="title-actions">
+      <button type="button" id="play-hvc" class="primary big">JUGAR</button>
+      <button type="button" id="play-cvc" class="big">CPU vs CPU</button>
+      <div class="title-row">
+        <button type="button" id="open-howto">Cómo jugar</button>
+        <button type="button" id="open-settings">Configuración</button>
+      </div>
     </div>
+    <p id="title-status" class="title-status"></p>
+  </div>
+</div>
+
+<div id="chars" class="overlay" hidden>
+  <div class="menu-box">
+    <header class="screen-head">
+      <button type="button" id="chars-back" class="back" aria-label="Volver">←</button>
+      <h2 id="chars-title">Elige tu luchador</h2>
+    </header>
     <div class="sides">
       <section class="side" id="side-0">
-        <h2>Jugador 1 <span class="who"></span></h2>
+        <h3>Jugador 1 <span class="who"></span></h3>
         <div class="roster" role="listbox" aria-label="Luchador del jugador 1"></div>
-        <label class="model-row">Modelo de la CPU <select class="model"></select></label>
-        <label class="pick-row"><input type="checkbox" class="cpu-picks"> La CPU elige su luchador</label>
         <div class="detail"></div>
       </section>
       <section class="side" id="side-1">
-        <h2>Jugador 2 <span class="who"></span></h2>
-        <div class="roster" role="listbox" aria-label="Luchador del jugador 2"></div>
-        <label class="model-row">Modelo de la CPU <select class="model"></select></label>
-        <label class="pick-row"><input type="checkbox" class="cpu-picks"> La CPU elige su luchador</label>
+        <h3>Rival <span class="who"></span></h3>
+        <div class="roster" role="listbox" aria-label="Luchador del rival"></div>
         <div class="detail"></div>
       </section>
     </div>
-    <details class="more" id="more-opts">
-    <summary>Opciones, sonido y API key de Jev</summary>
-    <div class="options">
-      <label>Decisión de la CPU
+    <div class="actions sticky">
+      <button type="button" id="start" class="primary">PELEAR</button>
+    </div>
+  </div>
+</div>
+
+<div id="settings" class="overlay" hidden>
+  <div class="menu-box settings-box">
+    <header class="screen-head">
+      <button type="button" id="settings-back" class="back" aria-label="Volver">←</button>
+      <h2>Configuración</h2>
+    </header>
+    <section class="set-group">
+      <h3>Inteligencia artificial</h3>
+      <label class="set-row" id="model-row-1">Modelo del rival <select class="model" id="model-1"></select></label>
+      <label class="set-row" id="model-row-0">Modelo de la CPU 1 (CPU vs CPU) <select class="model" id="model-0"></select></label>
+      <label class="set-check" id="pick-row-1"><input type="checkbox" id="picks-1"> El rival elige su luchador</label>
+      <label class="set-check" id="pick-row-0"><input type="checkbox" id="picks-0"> En CPU vs CPU, la CPU 1 elige su luchador</label>
+      <label class="set-row">Cómo decide la CPU
         <select id="decision-mode">
           <option value="argmax">Opción más probable</option>
           <option value="sample">Muestrear según las probabilidades</option>
         </select>
       </label>
+      <label class="set-check"><input type="checkbox" id="opt-aiinfo"> Mostrar el razonamiento de la IA (probabilidades)</label>
       <p id="ollama-status" class="status" role="status"></p>
-    </div>
-    <div class="options sound-row">
-      <label><input type="checkbox" id="opt-sfx"> Efectos de sonido</label>
-      <label><input type="checkbox" id="opt-music"> Música</label>
-      <label>Volumen <input type="range" id="opt-volume" min="0" max="1" step="0.05"></label>
-      <label><select id="opt-touch">
-        <option value="auto">Controles táctiles: automático</option>
-        <option value="on">Controles táctiles: siempre</option>
-        <option value="off">Controles táctiles: nunca</option>
-      </select></label>
-    </div>
-    <div class="jev-row">
-      <label for="jev-key">API key de Jev (TypeSafe)</label>
-      <input type="password" id="jev-key" autocomplete="off" spellcheck="false" placeholder="Queda solo en la memoria del servidor local">
-      <button type="button" id="jev-connect">Conectar</button>
-      <button type="button" id="jev-clear">Quitar</button>
-      <p id="jev-status" class="status" role="status"></p>
-    </div>
-    </details>
-    <div class="actions sticky">
-      <button type="button" id="start" class="primary">PELEAR</button>
-    </div>
+      <details class="more" id="more-opts">
+        <summary>Usar tu propia API key de Jev</summary>
+        <div class="jev-row">
+          <input type="password" id="jev-key" autocomplete="off" spellcheck="false" aria-label="API key de Jev">
+          <button type="button" id="jev-connect">Conectar</button>
+          <button type="button" id="jev-clear">Quitar</button>
+          <p id="jev-status" class="status" role="status"></p>
+        </div>
+      </details>
+    </section>
+    <section class="set-group">
+      <h3>Sonido</h3>
+      <label class="set-check"><input type="checkbox" id="opt-sfx"> Efectos de sonido</label>
+      <label class="set-check"><input type="checkbox" id="opt-music"> Música</label>
+      <label class="set-row">Volumen <input type="range" id="opt-volume" min="0" max="1" step="0.05"></label>
+    </section>
+    <section class="set-group">
+      <h3>Controles</h3>
+      <label class="set-row">Controles táctiles
+        <select id="opt-touch">
+          <option value="auto">Automático</option>
+          <option value="on">Siempre</option>
+          <option value="off">Nunca</option>
+        </select>
+      </label>
+    </section>
+    <div class="actions"><button type="button" id="settings-close" class="primary">Listo</button></div>
+  </div>
+</div>
+
+<div id="howto" class="overlay" hidden>
+  <div class="menu-box small howto-box">
+    <header class="screen-head">
+      <button type="button" id="howto-back" class="back" aria-label="Volver">←</button>
+      <h2>Cómo jugar</h2>
+    </header>
+    <dl class="keys">
+      <dt>Teclado</dt><dd>WASD o flechas para moverte (↑ salta), J = A, K = B, Esc pausa</dd>
+      <dt>Táctil</dt><dd>Joystick a la izquierda, A, B y A+B a la derecha</dd>
+    </dl>
+    <div id="howto-moves" class="moves"></div>
+    <p class="note">Los golpes que conectan se cancelan en cadena: golpe → patada → skill → definitiva. El agarre vence al bloqueo. Más de 5 s sin atacar ni avanzar activa una penalización por pasividad.</p>
   </div>
 </div>
 
@@ -138,11 +167,12 @@
 <div id="pause" class="overlay" hidden>
   <div class="menu-box small">
     <h2>Pausa</h2>
-    <div id="pause-moves" class="moves"></div>
-    <div class="actions">
+    <div class="pause-actions">
       <button type="button" id="resume" class="primary">Continuar</button>
+      <button type="button" id="pause-settings">Configuración</button>
       <button type="button" id="quit">Salir al menú</button>
     </div>
+    <details class="more"><summary>Comandos</summary><div id="pause-moves" class="moves"></div></details>
   </div>
 </div>
 
